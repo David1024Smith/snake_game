@@ -9,6 +9,23 @@ Rectangle {
     property var configManager
     signal backToMenu()
     
+    // 难度文本转换函数
+    function getDifficultyText(difficulty) {
+        switch(difficulty) {
+            case 1: return "非常简单"
+            case 2: return "简单"
+            case 3: return "容易"
+            case 4: return "普通"
+            case 5: return "中等"
+            case 6: return "困难"
+            case 7: return "很难"
+            case 8: return "极难"
+            case 9: return "噩梦"
+            case 10: return "地狱"
+            default: return "中等"
+        }
+    }
+    
     // 背景渐变
     Rectangle {
         anchors.fill: parent
@@ -69,7 +86,7 @@ Rectangle {
                             Layout.fillWidth: true
                             
                             Text {
-                                text: "默认难度:"
+                                text: "游戏难度:"
                                 color: "#FFFFFF"
                                 font.pixelSize: 16
                                 Layout.preferredWidth: 120
@@ -80,8 +97,14 @@ Rectangle {
                                 Layout.fillWidth: true
                                 from: 1
                                 to: 10
-                                value: 5
+                                value: settingsView.configManager ? settingsView.configManager.currentDifficulty : 5
                                 stepSize: 1
+                                
+                                onValueChanged: {
+                                    if (settingsView.configManager) {
+                                        settingsView.configManager.currentDifficulty = Math.round(value)
+                                    }
+                                }
                                 
                                 background: Rectangle {
                                     x: defaultDifficultySlider.leftPadding
@@ -114,11 +137,11 @@ Rectangle {
                             }
                             
                             Text {
-                                text: Math.round(defaultDifficultySlider.value)
+                                text: Math.round(defaultDifficultySlider.value) + " (" + getDifficultyText(Math.round(defaultDifficultySlider.value)) + ")"
                                 color: "#50FF80"
                                 font.pixelSize: 16
                                 font.bold: true
-                                Layout.preferredWidth: 30
+                                Layout.preferredWidth: 100
                             }
                         }
                         

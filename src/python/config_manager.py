@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer
 from typing import Dict, Any, List
+import os
 
 class ConfigManager(QObject):
     """配置管理器，负责读取和管理游戏配置"""
@@ -15,12 +16,13 @@ class ConfigManager(QObject):
     difficultyChanged = Signal(int)
     gameModeChanged = Signal(str)
     
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._config = {}
+    def __init__(self, config_file="config.toml"):
+        super().__init__()
+        self.config_file = config_file
+        self.config = {}
+        self._current_difficulty = 5  # 默认难度
+        self._current_game_mode = "classic"  # 默认游戏模式
         self._save_data = {}
-        self._current_difficulty = 1
-        self._current_game_mode = "classic"
         
         # 配置文件路径
         self._config_path = Path(__file__).parent.parent.parent / "config.toml"
@@ -31,28 +33,44 @@ class ConfigManager(QObject):
     
     def get_game_config(self):
         """返回游戏基本配置"""
-        return self._config.get("game", {})
+        return self.config.get("game", {})
     
     def load_config(self):
         """加载配置文件"""
         try:
-            if self._config_path.exists():
-                with open(self._config_path, 'r', encoding='utf-8') as f:
-                    self._config = toml.load(f)
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    self.config = toml.load(f)
+                print(f"配置文件加载成功: {self.config_file}")
+                
+                # 加载保存的难度设置
+                if 'user_settings' in self.config:
+                    self._current_difficulty = self.config['user_settings'].get('difficulty', 5)
+                    self._current_game_mode = self.config['user_settings'].get('game_mode', 'classic')
             else:
-                self._config = self._get_default_config()
+                print(f"配置文件不存在，使用默认配置: {self.config_file}")
+                self.config = self._get_default_config()
                 self.save_config()
         except Exception as e:
             print(f"加载配置文件失败: {e}")
-            self._config = self._get_default_config()
+            self.config = self._get_default_config()
         
         self.configChanged.emit()
     
     def save_config(self):
         """保存配置文件"""
         try:
-            with open(self._config_path, 'w', encoding='utf-8') as f:
-                toml.dump(self._config, f)
+            # 确保用户设置部分存在
+            if 'user_settings' not in self.config:
+                self.config['user_settings'] = {}
+            
+            # 保存当前难度和游戏模式
+            self.config['user_settings']['difficulty'] = self._current_difficulty
+            self.config['user_settings']['game_mode'] = self._current_game_mode
+            
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                toml.dump(self.config, f)
+            print(f"配置文件保存成功: {self.config_file}")
         except Exception as e:
             print(f"保存配置文件失败: {e}")
     
@@ -152,6 +170,8 @@ class ConfigManager(QObject):
         if self._current_difficulty != value:
             self._current_difficulty = value
             self.difficultyChanged.emit(value)
+            self.save_config()  # 自动保存设置
+            print(f"Difficulty changed to: {value}")
     
     @Property(str, notify=gameModeChanged)
     def currentGameMode(self):
@@ -162,23 +182,25 @@ class ConfigManager(QObject):
         if self._current_game_mode != value:
             self._current_game_mode = value
             self.gameModeChanged.emit(value)
+            self.save_config()  # 自动保存设置
+            print(f"Game mode changed to: {value}")
     
     @Slot(result=int)
     def getWindowWidth(self):
-        return self._config.get("game", {}).get("window_width", 1280)
+        return self.config.get("game", {}).get("window_width", 1280)
     
     @Slot(result=int)
     def getWindowHeight(self):
-        return self._config.get("game", {}).get("window_height", 720)
+        return self.config.get("game", {}).get("window_height", 720)
     
     @Slot(result=int)
     def getFPS(self):
-        return self._config.get("game", {}).get("fps", 60)
+        return self.config.get("game", {}).get("fps", 60)
     
     @Slot(int, result='QVariant')
     def getDifficultyConfig(self, level):
         """获取指定难度等级的配置"""
-        levels = self._config.get("difficulty", {}).get("levels", [])
+        levels = self.config.get("difficulty", {}).get("levels", [])
         for level_config in levels:
             if level_config.get("level") == level:
                 return level_config
@@ -187,22 +209,22 @@ class ConfigManager(QObject):
     @Slot(str, result='QVariant')
     def getGameModeConfig(self, mode):
         """获取游戏模式配置"""
-        return self._config.get("game_modes", {}).get(mode, {})
+        return self.config.get("game_modes", {}).get(mode, {})
     
     @Slot(result='QVariant')
     def getGraphicsConfig(self):
         """获取图形配置"""
-        return self._config.get("graphics", {})
+        return self.config.get("graphics", {})
     
     @Slot(result='QVariant')
     def getAudioConfig(self):
         """获取音频配置"""
-        return self._config.get("audio", {})
+        return self.config.get("audio", {})
     
     @Slot(result='QVariant')
     def getControlsConfig(self):
         """获取控制配置"""
-        return self._config.get("controls", {})
+        return self.config.get("controls", {})
     
     @Slot(str, int)
     def saveHighScore(self, mode, score):
@@ -222,5 +244,42 @@ class ConfigManager(QObject):
     
     @Slot(result='QVariant')
     def getAllHighScores(self):
-        """获取所有最高分"""
-        return self._save_data.get("high_scores", {}) 
+        """获取所有高分记录"""
+        return self._save_data.get("high_scores", {})
+
+    def get_achievements(self):
+        """获取成就数据"""
+        return self._save_data.get("achievements", {})
+
+    def save_achievements(self, achievements_data):
+        """保存成就数据"""
+        self._save_data["achievements"] = achievements_data
+        self.save_game_data()
+
+    @Slot(result='QVariant')
+    def getAllAchievements(self):
+        """获取所有成就数据（供QML使用）"""
+        return self._save_data.get("achievements", {})
+
+    @Slot(str, result=bool)
+    def isAchievementUnlocked(self, achievement_id):
+        """检查成就是否已解锁"""
+        achievements = self._save_data.get("achievements", {})
+        return achievements.get(achievement_id, {}).get("unlocked", False)
+
+    def get_statistics(self):
+        """获取游戏统计数据"""
+        return self._save_data.get("statistics", {})
+
+    def save_statistics(self, stats_data):
+        """保存游戏统计数据"""
+        self._save_data["statistics"] = stats_data
+        self.save_game_data()
+
+    @Slot(str, int)
+    def updateStatistic(self, stat_name, value):
+        """更新统计数据"""
+        if "statistics" not in self._save_data:
+            self._save_data["statistics"] = {}
+        self._save_data["statistics"][stat_name] = value
+        self.save_game_data() 
